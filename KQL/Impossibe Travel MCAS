@@ -1,0 +1,77 @@
+//============================================================================================
+//Impossible Travel - False Positivies
+//============================================================================================
+let MSDataCenterIPRange = dynamic(["96.70.157.65","96.70.157.66","66.193.116.2","216.59.102.42","216.59.102.43","216.59.102.44","216.56.102.45","216.56.102.46","96.73.152.41","96.73.152.42","96.73.152.43","96.73.152.44","96.73.152.45","96.73.152.46","52.224.146.241","266.3.31.249","66.3.31.249","96.120.14.38","50.247.119.1","96.84.187.1","131.156.138.10","38.140.134.66","38.140.134.67","50.78.4.209","165.117.255.54","50.249.120.17","50.249.120.18","50.249.120.19","50.249.120.20","50.249.120.21"]);
+//your Org Public IP addresses
+let OrgPublicIPRanges = dynamic (["xxx.xx.xxx.xxx",]);
+let ValidateOrgIPRanges = 
+(IPAddress:string) {
+iff(ipv4_is_match(IPAddress,"xxx.xx.xxx.xxx/29"),true,
+false))))))))))))))))))))) };
+let ipRegex = "(((([0-9]{1,4}).){3}([0-9]{1,4}))|(([0-9a-zA-Z]{1,4}:){7}[0-9a-zA-Z]{1,4}))";
+let emailRegex = "([a-zA-Z0-9.%+-_]+@[a-zA-Z-_]+.[A-Za-z]{2,4})";
+let dataset = 5m;
+let  ITipaddress1 = 
+SecurityAlert
+| where AlertName == "Impossible travel activity" and TimeGenerated >= ago(dataset)
+| extend IPaddr1 = extract(ipRegex,1,Description)
+//| extend IPaddr2 = reverse(extract(ipRegex,1,reverse(Description)))
+| summarize IP1 = make_set(IPaddr1)
+| project IP1 ;
+let ITipaddress2 = 
+SecurityAlert
+| where AlertName == "Impossible travel activity" and TimeGenerated >= ago(dataset)
+//| extend IPaddr1 = extract(ipRegex,1,Description)
+| extend IPaddr2 = reverse(extract(ipRegex,1,reverse(Description)))
+| summarize  IP2 = make_set(IPaddr2)
+| project IP2 ;
+let allSignInLogs = 
+SigninLogs
+//Exclude MS Data center IP Addresses & Org Public IP addresses
+| where IPAddress !in (MSDataCenterIPRange) and IPAddress !in (OrgPublicIPRanges)
+//Exclude Org IP Ranges
+| extend TrustedIPList = ValidateOrgIPRanges(IPAddress) | where TrustedIPList == "false"
+| where TimeGenerated >= ago(dataset) and UserPrincipalName contains "@";
+let compliancedevice = 
+allSignInLogs
+| where DeviceDetail.trustType == "Hybrid Azure AD joined"
+| where IPAddress in (ITipaddress1) or IPAddress in (ITipaddress2)
+| summarize Date = arg_max(TimeGenerated, *) by UserPrincipalName, IPAddress, Location
+| project Date, UserPrincipalName, IPAddress, Location;
+let noncompliancedevice = 
+allSignInLogs
+| where DeviceDetail.trustType == ""  and ResultType == "0"
+| where IPAddress in (ITipaddress1) or IPAddress in (ITipaddress2)
+| summarize Date1 = arg_max(TimeGenerated, *) by UserPrincipalName, IPAddress, ResultDescription, ResultType
+| project Date1 , UserPrincipalName , IPAddress1 = IPAddress, Location1 = Location, ResultDescription, ResultType;
+let finalresult = 
+compliancedevice
+| join kind=  inner(noncompliancedevice 
+)on UserPrincipalName 
+| where  Location <> Location1 and IPAddress <> IPAddress1
+| extend IPAddress_ = strcat(IPAddress,",",IPAddress1)
+| extend Location_ = strcat(Location,",",Location1)
+| extend Outcome = "TruePositive"
+| project  Date1, UserPrincipalName , IPAddress_, Location_, ResultDescription , ResultType, Outcome
+| order by Date1 desc ;
+finalresult
+| join  kind= inner  
+(
+    SecurityAlert
+    | where AlertName contains "Impossible travel activity" and TimeGenerated >= ago(dataset)
+    | order by TimeGenerated desc 
+    | extend Countries_ = tostring(parse_json(ExtendedProperties).Countries)
+    | extend User = extract(emailRegex,1,tostring(Description))
+    | extend mcasAlertID= tostring(split(parsejson(ExtendedLinks)[1]["Href"],"#/alerts/")[1])
+    | extend IPaddr1 = extract(ipRegex,1,Description)
+    | extend IPaddr2 = reverse(extract(ipRegex,1,reverse(Description)))
+    | extend IPAddress2 =  strcat(IPaddr1,",",IPaddr2)
+    | extend IPAddress3 =  strcat(IPaddr2,",",IPaddr1)
+    | project TimeGenerated, User, Description,IPAddress2, Countries_, IPAddress3, mcasAlertID  ) on 
+$left.UserPrincipalName  == $right.User//, $left.IPAddress_ == $right.IPAddress2
+| where IPAddress_ == IPAddress2 or IPAddress_ == IPAddress3
+| extend Date = TimeGenerated
+| project  Date, UserPrincipalName , IPAddress = split(IPAddress_,","), Location_, ResultDescription ,ResultType, Description
+| mv-expand IPAddress
+| extend AccountCustomEntity = UserPrincipalName
+| extend IPCustomEntity = tostring(IPAddress)
