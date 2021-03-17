@@ -1,0 +1,18 @@
+SecurityEvent 
+| where (EventID == 4688 and 
+(CommandLine contains " -decode " 
+or CommandLine contains " /decode " 
+or CommandLine contains " -decodehex " 
+or CommandLine contains " /decodehex " 
+or CommandLine contains " -urlcache "
+or CommandLine contains " /urlcache "
+or CommandLine contains " -verifyctl "
+or CommandLine contains " /verifyctl "
+or CommandLine contains " -encode " 
+or CommandLine contains " /encode " 
+or CommandLine matches regex "(?i).*certutil.* -URL.*" 
+or CommandLine matches regex "(?i).*certutil.* /URL.*" 
+or CommandLine matches regex "(?i).*certutil.* -ping.*"
+or CommandLine matches regex "(?i).*certutil.* /ping.*"))
+| extend AccountCustomEntity = Account
+| extend HostCustomEntity = Computer
