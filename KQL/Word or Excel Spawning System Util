@@ -1,0 +1,8 @@
+DeviceProcessEvents
+| where TimeGenerated >= ago(1h)
+| sort by TimeGenerated desc 
+| where InitiatingProcessParentFileName in~ ("WINWORD.EXE", "Excel.exe","OUTLOOK.EXE")
+| where InitiatingProcessFolderPath contains "c:\\windows\\system32\\" and InitiatingProcessFileName <> "taskkill.exe" and InitiatingProcessFileName <> "WerFault.exe"
+| project TimeGenerated, AccountName, AccountDomain, DeviceName, FileName, FolderPath, InitiatingProcessParentFileName, InitiatingProcessFileName, InitiatingProcessCommandLine, ProcessCommandLine
+| extend AccountCustomEntity = AccountName
+| extend HostCustomEntity = DeviceName
