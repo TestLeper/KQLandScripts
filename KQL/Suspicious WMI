@@ -1,0 +1,8 @@
+DeviceProcessEvents
+| where FileName == "WMIC.exe"
+| where ProcessCommandLine contains "process call create" 
+     or ProcessCommandLine contains "shadowcopy delete"
+	or ProcessCommandLine contains "list full"
+	or ProcessCommandLine contains 'findstr /i "Auto"'
+| where InitiatingProcessCommandLine <> "\"cmd.exe\" /K \"C:\\Windows\\SetupReport\\Setupreport.cmd \""
+| extend AccountCustomEntity = AccountName, HostCustomEntity = DeviceName
